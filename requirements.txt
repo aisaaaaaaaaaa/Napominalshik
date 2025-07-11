@@ -1,3 +1,4 @@
 python-telegram-bot==20.7
 apscheduler==3.10.4
-pyTelegramBotAPI==25.1.1
+pyTelegramBotAPI==4.27.0
+
