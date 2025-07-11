@@ -3,6 +3,7 @@ from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     ContextTypes,
+    Application,
 )
 from apscheduler.schedulers.background import BackgroundScheduler
 from db import init_db, add_task, get_tasks, delete_task
@@ -27,21 +28,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/delete [ID] – удалить задачу"
     )
 
-# Планировка асинхронного напоминания
-def schedule_async_reminder(user_id, text, time):
-    scheduler.add_job(lambda: asyncio.run(send_reminder(user_id, text)), 'date', run_date=time)
+# Отправка уведомления
+async def send_reminder(bot, user_id, text):
+    try:
+        await bot.send_message(chat_id=user_id, text=f"🔔 Напоминание: {text}")
+    except Exception as e:
+        print(f"Ошибка отправки: {e}")
+
+# Планировка напоминания
+def schedule_async_reminder(bot, user_id, text, time):
+    scheduler.add_job(lambda: asyncio.run(send_reminder(bot, user_id, text)), 'date', run_date=time)
 
 # Добавление напоминания
 async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    raw_text = ' '.join(context.args).replace('\xa0', ' ')  # Заменяем неразрывные пробелы
+    raw_text = ' '.join(context.args).replace('\xa0', ' ')
 
     if not raw_text:
         await update.message.reply_text("❗Напиши: /add [что напомнить] [время или дата]")
         return
 
     try:
-        # Поиск шаблонов
         full_datetime = re.search(r'(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})$', raw_text)
         tomorrow_time = re.search(r'завтра\s+в\s+(\d{1,2}:\d{2})$', raw_text, re.IGNORECASE)
         just_time = re.search(r'в\s+(\d{1,2}:\d{2})$', raw_text)
@@ -69,9 +76,8 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❗Время уже прошло. Напоминание должно быть на будущее.")
             return
 
-        # Сохраняем в БД и планируем
         task_id = add_task(user_id, text, remind_time)
-        schedule_async_reminder(user_id, text, remind_time)
+        schedule_async_reminder(context.bot, user_id, text, remind_time)
 
         await update.message.reply_text(
             f"✅ Напоминание добавлено:\n📌 {text}\n🕒 {remind_time.strftime('%d.%m.%Y %H:%M')}"
@@ -86,13 +92,6 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         print(f"Ошибка в /add: {e}")
 
-# Отправка уведомления
-async def send_reminder(user_id, text):
-    try:
-        await app.bot.send_message(chat_id=user_id, text=f"🔔 Напоминание: {text}")
-    except Exception as e:
-        print(f"Ошибка отправки: {e}")
-
 # Показать список задач
 async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -106,7 +105,7 @@ async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
         await update.message.reply_text(f"📋 Твои напоминания:\n{msg}")
 
-# Удалить задачу
+# Удаление задачи
 async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("❗ Используй: /delete [ID]")
@@ -121,7 +120,7 @@ async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Запуск бота
 if __name__ == "__main__":
     init_db()
-    app = ApplicationBuilder().token("7309853259:AAEgnNjHnRLBWMt-0K6VRkJTXIczj2HvPd0").build()
+    app = ApplicationBuilder().token("7309...ТВОЙ_ТОКЕН...").build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add))
